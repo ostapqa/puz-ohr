@@ -7,7 +7,8 @@ from math import sqrt
 import openpyxl
 import pandas as pd
 
-number_of_experts = 10
+total_number_of_experts = 1000
+number_of_experts = 5
 filename = "table.xlsx"
 
 
@@ -23,10 +24,10 @@ def get_sheet(filepath, index):
 
 
 def select_random_experts():
-    numbers = list(range(1, 1001))
+    numbers = list(range(1, total_number_of_experts+1))
     random_numbers = random.sample(numbers, number_of_experts)
 
-    sorted_keys = [f"E{i}" for i in range(1, number_of_experts)]
+    sorted_keys = [f"E{i}" for i in range(1, number_of_experts+1)]
 
     result = dict(zip(sorted_keys, random_numbers))
 
@@ -58,18 +59,18 @@ def fill_the_cells(filepath, step):
         min_value = random.randint(1, 4)
         sheet.cell(row=row_num, column=2, value=min_value)
 
-    # Save the workbook to a file
     wb.save(filepath)
 
-    return pd.read_excel(filepath)
 
-
-def create_source_file(filepath, step):
+def create_file(filepath):
     wb = openpyxl.Workbook()
 
-    default_sheet = wb.active
-    wb.remove(default_sheet)
+    wb.save(filepath)
+    return wb
 
+
+def create_source_sheet(filepath, step):
+    wb = openpyxl.load_workbook(filepath)
     sheet_name = f'Исходные данные {step} шага'
 
     sheet = wb.create_sheet(title=sheet_name)
@@ -90,8 +91,6 @@ def create_source_file(filepath, step):
         sheet.cell(row=1, column=reason + len(column_names) + 3, value=f"Объяснение {column_names[reason]}")
 
     wb.save(filepath)
-
-    return pd.read_excel(filepath)
 
 
 def create_calculation_sheet(filepath, step):
@@ -126,7 +125,7 @@ def calculations(filepath, step):
     source_sheet_name = f'Исходные данные {step} шага'
     source_sheet = wb[source_sheet_name]
 
-    iteration_number = 1000
+    iteration_number = total_number_of_experts
 
     calculation_columns_names = ['Число итераций', 'Среднее оценок экспертов',
                                  'Дисперсия', 'Среднеквадр. отклонение', 'Коэф. вариации', 'Асимметрия', ]
@@ -191,7 +190,7 @@ def calculations(filepath, step):
         expert_row_calculation_sheet = expert + 2
         rates_mean = calculation_sheet.cell(column=3, row=expert_row_calculation_sheet).value
 
-        var = ((min_rate - rates_mean) ** 2 + (avg_rate - rates_mean) ** 2 + (max_rate - avg_rate) ** 2) / 3
+        var = ((min_rate - rates_mean) ** 2 + (avg_rate - rates_mean) ** 2 + (max_rate - rates_mean) ** 2) / 3
 
         return var
 
@@ -228,6 +227,19 @@ def calculations(filepath, step):
 
         return coefficient
 
+    def percent_calculation():
+        previous_step = step - 1
+        previous_calculation_sheet_name = f'Вычисления {previous_step} шага'
+
+        previous_calculation_sheet = wb[previous_calculation_sheet_name]
+
+        prev_variation = previous_calculation_sheet.cell(row=2, column=6).value
+        current_variation = calculation_sheet.cell(row=2, column=6).value
+
+        result = abs(prev_variation - current_variation) * 100 / prev_variation
+
+        return result
+
     # 1: заполнение ячеек столбца среднее оценок экспертов
     for expert_row in range(2, number_of_experts + 2):
         column_letter = find_column_index_by_name('Среднее оценок экспертов')
@@ -261,17 +273,46 @@ def calculations(filepath, step):
 
     wb.save(filepath)
 
+    if step != 1:
+        percent = percent_calculation()
+        # добавление столбца Процент оценки спроса
+        calculation_sheet.cell(row=1, column=9, value="Процент оценки спроса")
+        calculation_sheet.cell(row=2, column=9, value=percent)
+        wb.save(filepath)
+
+        return percent
+
+
+# remove default sheet (empty sheet created by openyxl)
+def delete_default_sheet(filepath):
+    wb = openpyxl.load_workbook(filepath)
+    default_sheet_name = 'Sheet'
+    default_sheet = wb[default_sheet_name]
+    wb.remove(default_sheet)
+    wb.save(filepath)
+
 
 def main():
     source_dir = input("Выберите директорию для расположения исходного файла.\n")
+
+    # for step in range(2):
     path_to_file = os.path.join(source_dir, filename)
+    create_file(path_to_file)
 
-    create_source_file(path_to_file, 1)
+    for step in range(1, 6):
+        if step == 1:
+            create_source_sheet(path_to_file, step)
+            fill_the_cells(path_to_file, step)
+            calculations(path_to_file, step)
+        else:
+            create_source_sheet(path_to_file, step)
+            fill_the_cells(path_to_file, step)
+            percent = calculations(path_to_file, step)
+            if 3 <= percent <= 10:
+                break
 
-    fill_the_cells(path_to_file, 1)
-
-    calculations(path_to_file, 1)
-    print(get_sheet(path_to_file, 2))
+    # remove default sheet
+    delete_default_sheet(path_to_file)
 
 
 main()
