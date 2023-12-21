@@ -10,6 +10,7 @@ import pandas as pd
 total_number_of_experts = 1000
 number_of_experts = 5
 filename = "table.xlsx"
+comparison_percentage = 10
 
 
 def get_sheet(filepath, index):
@@ -308,7 +309,7 @@ def main():
             create_source_sheet(path_to_file, step)
             fill_the_cells(path_to_file, step)
             percent = calculations(path_to_file, step)
-            if 3 <= percent <= 10:
+            if percent < comparison_percentage:
                 break
 
     # remove default sheet
